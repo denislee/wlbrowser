@@ -211,20 +211,42 @@ func deleteLastWordBeforeCursor(text string, pos int) (string, int) {
 	return string(res), start + 1
 }
 
-// AttachEscape wires Escape and Ctrl+K on the Entry to Cancel().
+// AttachReadline wires standard readline-like shortcuts (Ctrl+A, Ctrl+E, Ctrl+W)
+// to the given Entry.
+func AttachReadline(e *gtk.Entry) {
+	ctrl := gtk.NewEventControllerKey()
+	ctrl.ConnectKeyPressed(func(keyval, _ uint, state gdk.ModifierType) bool {
+		if (state & gdk.ControlMask) != 0 {
+			switch keyval {
+			case gdk.KEY_a:
+				e.SetPosition(0)
+				return true
+			case gdk.KEY_e:
+				e.SetPosition(-1)
+				return true
+			case gdk.KEY_w:
+				text := e.Text()
+				pos := e.Position()
+				newText, newPos := deleteLastWordBeforeCursor(text, pos)
+				e.SetText(newText)
+				e.SetPosition(newPos)
+				return true
+			}
+		}
+		return false
+	})
+	e.AddController(ctrl)
+}
+
+// AttachEscape wires Escape and Ctrl+K on the Entry to Cancel(), and also
+// adds readline shortcuts via AttachReadline.
 func (b *Bar) AttachEscape() {
+	AttachReadline(b.Entry)
+
 	ctrl := gtk.NewEventControllerKey()
 	ctrl.ConnectKeyPressed(func(keyval, _ uint, state gdk.ModifierType) bool {
 		if keyval == gdk.KEY_Escape || (keyval == gdk.KEY_k && (state&gdk.ControlMask) != 0) {
 			b.Cancel()
-			return true
-		}
-		if keyval == gdk.KEY_w && (state&gdk.ControlMask) != 0 {
-			text := b.Entry.Text()
-			pos := b.Entry.Position()
-			newText, newPos := deleteLastWordBeforeCursor(text, pos)
-			b.Entry.SetText(newText)
-			b.Entry.SetPosition(newPos)
 			return true
 		}
 		return false

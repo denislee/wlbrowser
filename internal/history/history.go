@@ -34,6 +34,10 @@ func New() (*Store, error) {
 		return nil, err
 	}
 
+	// Optimize for performance
+	_, _ = db.Exec("PRAGMA journal_mode = WAL")
+	_, _ = db.Exec("PRAGMA synchronous = NORMAL")
+
 	_, err = db.Exec(`
 		CREATE TABLE IF NOT EXISTS history (
 			url TEXT PRIMARY KEY,

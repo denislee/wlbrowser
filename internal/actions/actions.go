@@ -163,6 +163,27 @@ func (d *Dispatcher) Run(a config.Action, count int) {
 			})();
 		`)
 
+	case "line-start":
+		evalJS(d.View, `
+			(function() {
+				var el = document.activeElement;
+				if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) {
+					el.setSelectionRange(0, 0);
+				}
+			})();
+		`)
+
+	case "line-end":
+		evalJS(d.View, `
+			(function() {
+				var el = document.activeElement;
+				if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) {
+					var len = el.value.length;
+					el.setSelectionRange(len, len);
+				}
+			})();
+		`)
+
 	// ─── Free-form ────────────────────────────────────────────────────
 	case "exec":
 		d.runExec(a)
@@ -205,6 +226,7 @@ func (d *Dispatcher) openSettings() {
 	entryHome := gtk.NewEntry()
 	entryHome.SetText(d.Config.Home)
 	entryHome.SetHExpand(true)
+	cmdbar.AttachReadline(entryHome)
 	homeRow.Append(lblHome)
 	homeRow.Append(entryHome)
 	genBox.Append(homeRow)
@@ -364,6 +386,9 @@ func (d *Dispatcher) openSettings() {
 	})
 
 	dialog.SetDefaultSize(500, 600)
+	dialog.ConnectResponse(func(_ int) {
+		dialog.Destroy()
+	})
 	dialog.Show()
 }
 

@@ -55,46 +55,84 @@ func main() {
 		return
 	}
 
-	cfg, err := config.Load(*cfgPath)
-	if err != nil {
-		log.Fatal(err)
-	}
+	var globalCfg *config.Config
+	cfgReady := make(chan struct{})
+	histChan := make(chan *history.Store, 1)
 
-	if cfg.SetDefault {
-		if err := config.EnsureDefaultBrowser(); err != nil {
-			log.Printf("failed to set as default browser: %v", err)
+	go func() {
+		cfg, err := config.Load(*cfgPath)
+		if err != nil {
+			log.Printf("failed to load config: %v", err)
+			cfg, _ = config.Load("") // try default if path failed, though Load handles it
 		}
-	}
+		globalCfg = cfg
+		close(cfgReady)
+	}()
 
-	histStore, err := history.New()
-	if err != nil {
-		log.Printf("failed to open history db: %v", err)
-	} else {
-		defer histStore.Close()
-	}
+	go func() {
+		histStore, err := history.New()
+		if err != nil {
+			log.Printf("failed to open history db: %v", err)
+			histChan <- nil
+		} else {
+			histChan <- histStore
+		}
+	}()
 
-	targetURL := cfg.Home
-	if flag.NArg() > 0 {
-		targetURL = flag.Arg(0)
-	}
+	app := gtk.NewApplication("dev.wlbrowser", gio.ApplicationHandlesCommandLine)
 
-	app := gtk.NewApplication("dev.wlbrowser", gio.ApplicationFlagsNone)
-	app.ConnectActivate(func() { activate(app, cfg, histStore, targetURL) })
-	if code := app.Run(os.Args[:1]); code != 0 {
+	app.ConnectStartup(setupApp)
+
+	var globalHist *history.Store
+	histReady := make(chan struct{})
+
+	// Monitor histChan to capture the store for shutdown and subsequent activations
+	go func() {
+		globalHist = <-histChan
+		close(histReady)
+	}()
+
+	app.ConnectCommandLine(func(cmd *gio.ApplicationCommandLine) int {
+		args := cmd.Arguments()
+
+		<-cfgReady
+		cfg := globalCfg
+
+		if cfg.SetDefault {
+			go func() {
+				if err := config.EnsureDefaultBrowser(); err != nil {
+					log.Printf("failed to set as default browser: %v", err)
+				}
+			}()
+		}
+
+		target := cfg.Home
+		fs := flag.NewFlagSet("wlbrowser", flag.ContinueOnError)
+		fs.Bool("write-config", false, "")
+		fs.Bool("set-default", false, "")
+		fs.String("config", "", "")
+		if err := fs.Parse(args[1:]); err == nil {
+			if fs.NArg() > 0 {
+				target = fs.Arg(0)
+			}
+		}
+
+		activate(app, cfg, histReady, &globalHist, target)
+		return 0
+	})
+
+	app.ConnectShutdown(func() {
+		if globalHist != nil {
+			globalHist.Close()
+		}
+	})
+
+	if code := app.Run(os.Args); code != 0 {
 		os.Exit(code)
 	}
 }
 
-func activate(app *gtk.Application, cfg *config.Config, histStore *history.Store, targetURL string) {
-	fmt.Fprintln(os.Stderr, "DEBUG: activating")
-	win := gtk.NewApplicationWindow(app)
-	win.SetTitle(cfg.Title)
-	win.SetDefaultSize(cfg.Width, cfg.Height)
-
-	view := webkit.NewWebView()
-	view.SetVExpand(true)
-	view.SetHExpand(true)
-
+func setupApp() {
 	// Configure session persistence
 	home, _ := os.UserHomeDir()
 	dataDir := filepath.Join(home, ".local", "share", "wlbrowser")
@@ -104,11 +142,6 @@ func activate(app *gtk.Application, cfg *config.Config, histStore *history.Store
 	cookieMgr := session.CookieManager()
 	cookieMgr.SetPersistentStorage(filepath.Join(dataDir, "cookies.db"), webkit.CookiePersistentStorageSqlite)
 	cookieMgr.SetAcceptPolicy(webkit.CookiePolicyAcceptAlways)
-
-	settings := view.Settings()
-	settings.SetEnableHtml5LocalStorage(true)
-	settings.SetEnableHtml5Database(true)
-	view.SetSettings(settings)
 
 	css := gtk.NewCSSProvider()
 	css.LoadFromData(`
@@ -152,6 +185,22 @@ func activate(app *gtk.Application, cfg *config.Config, histStore *history.Store
 		.domain-title { font-weight: bold; color: #333333; }
 	`)
 	gtk.StyleContextAddProviderForDisplay(gdk.DisplayGetDefault(), css, gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+}
+
+func activate(app *gtk.Application, cfg *config.Config, histReady <-chan struct{}, globalHist **history.Store, targetURL string) {
+	fmt.Fprintln(os.Stderr, "DEBUG: activating")
+	win := gtk.NewApplicationWindow(app)
+	win.SetTitle(cfg.Title)
+	win.SetDefaultSize(cfg.Width, cfg.Height)
+
+	view := webkit.NewWebView()
+	view.SetVExpand(true)
+	view.SetHExpand(true)
+
+	settings := view.Settings()
+	settings.SetEnableHtml5LocalStorage(true)
+	settings.SetEnableHtml5Database(true)
+	view.SetSettings(settings)
 
 	bar := cmdbar.New()
 	bar.AttachEscape()
@@ -189,8 +238,18 @@ func activate(app *gtk.Application, cfg *config.Config, histStore *history.Store
 		Find:   findCtrl,
 		Home:   cfg.Home,
 		Config: cfg,
-		Hist:   histStore,
+		Hist:   nil, // Loaded asynchronously
 	}
+
+	// Load history in the background and update dispatcher when ready
+	go func() {
+		<-histReady
+		h := *globalHist
+		glib.IdleAdd(func() bool {
+			disp.Hist = h
+			return false
+		})
+	}()
 
 	machine, err := mode.New(
 		cfg.Keys["normal"],
@@ -223,8 +282,8 @@ func activate(app *gtk.Application, cfg *config.Config, histStore *history.Store
 		if strings.HasPrefix(text, "/") {
 			bar.Scrolled.SetVisible(false)
 			findCtrl.Start(text[1:])
-		} else if histStore != nil && text != "" && !strings.HasPrefix(text, ":") {
-			results := histStore.Search(text)
+		} else if disp.Hist != nil && text != "" && !strings.HasPrefix(text, ":") {
+			results := disp.Hist.Search(text)
 			var suggestions []cmdbar.Suggestion
 			for _, r := range results {
 				suggestions = append(suggestions, cmdbar.Suggestion{
@@ -279,8 +338,8 @@ func activate(app *gtk.Application, cfg *config.Config, histStore *history.Store
 			if !bar.Entry.HasFocus() {
 				bar.SetText(uri)
 			}
-			if histStore != nil && uri != "" {
-				histStore.Add(uri, view.Title())
+			if disp.Hist != nil && uri != "" {
+				disp.Hist.Add(uri, view.Title())
 			}
 		}
 	})
