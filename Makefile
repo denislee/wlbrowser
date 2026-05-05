@@ -1,4 +1,6 @@
-.PHONY: run clean test
+.PHONY: build run clean test wlbrowser
+
+build: wlbrowser
 
 run: wlbrowser
 	./wlbrowser

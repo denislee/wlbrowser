@@ -73,14 +73,19 @@ func main() {
 		defer histStore.Close()
 	}
 
+	targetURL := cfg.Home
+	if flag.NArg() > 0 {
+		targetURL = flag.Arg(0)
+	}
+
 	app := gtk.NewApplication("dev.wlbrowser", gio.ApplicationFlagsNone)
-	app.ConnectActivate(func() { activate(app, cfg, histStore) })
+	app.ConnectActivate(func() { activate(app, cfg, histStore, targetURL) })
 	if code := app.Run(os.Args[:1]); code != 0 {
 		os.Exit(code)
 	}
 }
 
-func activate(app *gtk.Application, cfg *config.Config, histStore *history.Store) {
+func activate(app *gtk.Application, cfg *config.Config, histStore *history.Store, targetURL string) {
 	fmt.Fprintln(os.Stderr, "DEBUG: activating")
 	win := gtk.NewApplicationWindow(app)
 	win.SetTitle(cfg.Title)
@@ -280,7 +285,7 @@ func activate(app *gtk.Application, cfg *config.Config, histStore *history.Store
 		}
 	})
 
-	view.LoadURI(cfg.Home)
+	view.LoadURI(targetURL)
 	win.SetVisible(true)
 }
 

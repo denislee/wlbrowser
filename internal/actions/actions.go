@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	gtk "github.com/diamondburned/gotk4/pkg/gtk/v4"
+	glib "github.com/diamondburned/gotk4/pkg/glib/v2"
 
 	webkit "github.com/diamondburned/gotk4-webkitgtk/pkg/webkit/v6"
 	"github.com/diamondburned/gotk4/pkg/pango"
@@ -180,8 +181,7 @@ func (d *Dispatcher) openSettings() {
 	dialog.SetTitle("Settings")
 	dialog.SetTransientFor(d.Window)
 	dialog.SetModal(true)
-	dialog.AddButton("_Cancel", int(gtk.ResponseCancel))
-	dialog.AddButton("_Save", int(gtk.ResponseAccept))
+	dialog.AddButton("_Close", int(gtk.ResponseCancel))
 
 	content := dialog.ContentArea()
 	content.SetMarginTop(12)
@@ -189,31 +189,46 @@ func (d *Dispatcher) openSettings() {
 	content.SetMarginStart(12)
 	content.SetMarginEnd(12)
 
-	grid := gtk.NewGrid()
-	grid.SetColumnSpacing(10)
-	grid.SetRowSpacing(10)
+	mainBox := gtk.NewBox(gtk.OrientationVertical, 18)
+	content.Append(mainBox)
 
+	// ─── General Section ───────────────────────────────────────────────
+	genBox := gtk.NewBox(gtk.OrientationVertical, 8)
+	lblGen := gtk.NewLabel("General")
+	lblGen.SetHAlign(gtk.AlignStart)
+	lblGen.AddCSSClass("domain-title")
+	genBox.Append(lblGen)
+
+	// Home Page Row
+	homeRow := gtk.NewBox(gtk.OrientationHorizontal, 10)
 	lblHome := gtk.NewLabel("Home Page:")
-	lblHome.SetHAlign(gtk.AlignStart)
 	entryHome := gtk.NewEntry()
 	entryHome.SetText(d.Config.Home)
 	entryHome.SetHExpand(true)
+	homeRow.Append(lblHome)
+	homeRow.Append(entryHome)
+	genBox.Append(homeRow)
 
-	grid.Attach(lblHome, 0, 0, 1, 1)
-	grid.Attach(entryHome, 1, 0, 1, 1)
-
-	lblDefault := gtk.NewLabel("System:")
-	lblDefault.SetHAlign(gtk.AlignStart)
+	// Default Browser Row
+	defRow := gtk.NewBox(gtk.OrientationHorizontal, 10)
 	chkDefault := gtk.NewCheckButton()
-	chkDefault.SetLabel("Set as default browser")
+	chkDefault.SetLabel("Set as default browser on startup")
 	chkDefault.SetActive(d.Config.SetDefault)
-	grid.Attach(lblDefault, 0, 1, 1, 1)
-	grid.Attach(chkDefault, 1, 1, 1, 1)
+	defRow.Append(chkDefault)
+	
+	btnSetNow := gtk.NewButtonWithLabel("Set as Default Now")
+	btnSetNow.SetHAlign(gtk.AlignEnd)
+	defRow.Append(btnSetNow)
+	
+	genBox.Append(defRow)
+	mainBox.Append(genBox)
 
-	lblHist := gtk.NewLabel("History:")
+	// ─── History Section ───────────────────────────────────────────────
+	histBox := gtk.NewBox(gtk.OrientationVertical, 8)
+	lblHist := gtk.NewLabel("History")
 	lblHist.SetHAlign(gtk.AlignStart)
-	lblHist.SetMarginTop(12)
-	grid.Attach(lblHist, 0, 2, 2, 1)
+	lblHist.AddCSSClass("domain-title")
+	histBox.Append(lblHist)
 
 	histList := gtk.NewListBox()
 	histList.SetSelectionMode(gtk.SelectionNone)
@@ -230,13 +245,12 @@ func (d *Dispatcher) openSettings() {
 			return
 		}
 
-		entries, err := d.Hist.List(200) // Fetch more to allow grouping
+		entries, err := d.Hist.List(200)
 		if err != nil {
 			log.Printf("failed to list history: %v", err)
 			return
 		}
 
-		// Group by domain
 		groups := make(map[string][]history.Entry)
 		var domains []string
 		for _, e := range entries {
@@ -253,7 +267,6 @@ func (d *Dispatcher) openSettings() {
 
 		for _, domain := range domains {
 			domainBox := gtk.NewBox(gtk.OrientationVertical, 0)
-			
 			header := gtk.NewBox(gtk.OrientationHorizontal, 6)
 			header.SetMarginTop(8)
 			header.SetMarginBottom(4)
@@ -265,60 +278,39 @@ func (d *Dispatcher) openSettings() {
 			domainLabel.AddCSSClass("domain-title")
 			
 			delDomainBtn := gtk.NewButtonFromIconName("user-trash-symbolic")
-			delDomainBtn.SetTooltipText("Delete all history for " + domain)
-			
 			header.Append(domainLabel)
 			header.Append(delDomainBtn)
 			domainBox.Append(header)
 
 			urlsBox := gtk.NewBox(gtk.OrientationVertical, 0)
-			urlsBox.SetMarginStart(16) // Indent URLs under domain
-			
+			urlsBox.SetMarginStart(16)
 			for _, e := range groups[domain] {
 				row := gtk.NewBox(gtk.OrientationHorizontal, 6)
-				row.SetMarginTop(2)
-				row.SetMarginBottom(2)
-				row.SetMarginStart(8)
-				row.SetMarginEnd(8)
-
 				title := e.Title
-				if title == "" {
-					title = e.URL
-				}
+				if title == "" { title = e.URL }
 				label := gtk.NewLabel(title)
 				label.SetHExpand(true)
 				label.SetHAlign(gtk.AlignStart)
 				label.SetEllipsize(pango.EllipsizeEnd)
-				label.SetTooltipText(e.URL)
-
 				delBtn := gtk.NewButtonFromIconName("edit-delete-symbolic")
 				delBtn.SetHasFrame(false)
-				
 				row.Append(label)
 				row.Append(delBtn)
 
 				listBoxRow := gtk.NewListBoxRow()
 				listBoxRow.SetChild(row)
 				urlsBox.Append(listBoxRow)
-
-				// Main list box row for the domain group (pre-declare for closure)
 				domainRow := gtk.NewListBoxRow()
 
 				url := e.URL
 				delBtn.ConnectClicked(func() {
 					if err := d.Hist.Delete(url); err == nil {
 						urlsBox.Remove(listBoxRow)
-						// If domain box is now empty, we could remove it too
-						if urlsBox.FirstChild() == nil {
-							histList.Remove(domainRow)
-						}
+						if urlsBox.FirstChild() == nil { histList.Remove(domainRow) }
 					}
 				})
 			}
-
 			domainBox.Append(urlsBox)
-			
-			// Main list box row for the domain group
 			domainRow := gtk.NewListBoxRow()
 			domainRow.SetChild(domainBox)
 			domainRow.SetActivatable(false)
@@ -339,43 +331,39 @@ func (d *Dispatcher) openSettings() {
 	scroll := gtk.NewScrolledWindow()
 	scroll.SetChild(histList)
 	scroll.SetVExpand(true)
-	scroll.SetMinContentHeight(200)
-	scroll.SetPropagateNaturalHeight(true)
-	grid.Attach(scroll, 0, 3, 2, 1)
+	scroll.SetMinContentHeight(300)
+	histBox.Append(scroll)
+	mainBox.Append(histBox)
 
-	content.Append(grid)
-
-	dialog.ConnectResponse(func(responseID int) {
-		if responseID == int(gtk.ResponseAccept) {
-			newHome := entryHome.Text()
-			newDefault := chkDefault.Active()
-			dirty := false
-
-			if newHome != "" && newHome != d.Config.Home {
-				d.Config.Home = newHome
-				d.Home = newHome
-				dirty = true
-			}
-			if newDefault != d.Config.SetDefault {
-				d.Config.SetDefault = newDefault
-				dirty = true
-				if newDefault {
-					if err := config.EnsureDefaultBrowser(); err != nil {
-						log.Printf("failed to set as default browser: %v", err)
-					}
-				}
-			}
-
-			if dirty {
-				if err := d.Config.Save(""); err != nil {
-					log.Printf("failed to save settings: %v", err)
-				}
-			}
+	// ─── Event Handlers ───────────────────────────────────────────────
+	entryHome.ConnectChanged(func() {
+		newHome := entryHome.Text()
+		if newHome != "" && newHome != d.Config.Home {
+			d.Config.Home = newHome
+			d.Home = newHome
+			d.Config.Save("")
 		}
-		dialog.Destroy()
 	})
 
-	dialog.SetDefaultSize(400, -1)
+	chkDefault.ConnectToggled(func() {
+		d.Config.SetDefault = chkDefault.Active()
+		d.Config.Save("")
+	})
+
+	btnSetNow.ConnectClicked(func() {
+		if err := config.EnsureDefaultBrowser(); err != nil {
+			log.Printf("failed to set as default browser: %v", err)
+		} else {
+			// Visual feedback would be nice, but simple for now
+			btnSetNow.SetLabel("Success!")
+			glib.TimeoutAdd(2000, func() bool {
+				btnSetNow.SetLabel("Set as Default Now")
+				return false
+			})
+		}
+	})
+
+	dialog.SetDefaultSize(500, 600)
 	dialog.Show()
 }
 
