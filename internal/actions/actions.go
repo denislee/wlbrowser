@@ -202,10 +202,18 @@ func (d *Dispatcher) openSettings() {
 	grid.Attach(lblHome, 0, 0, 1, 1)
 	grid.Attach(entryHome, 1, 0, 1, 1)
 
+	lblDefault := gtk.NewLabel("System:")
+	lblDefault.SetHAlign(gtk.AlignStart)
+	chkDefault := gtk.NewCheckButton()
+	chkDefault.SetLabel("Set as default browser")
+	chkDefault.SetActive(d.Config.SetDefault)
+	grid.Attach(lblDefault, 0, 1, 1, 1)
+	grid.Attach(chkDefault, 1, 1, 1, 1)
+
 	lblHist := gtk.NewLabel("History:")
 	lblHist.SetHAlign(gtk.AlignStart)
 	lblHist.SetMarginTop(12)
-	grid.Attach(lblHist, 0, 1, 2, 1)
+	grid.Attach(lblHist, 0, 2, 2, 1)
 
 	histList := gtk.NewListBox()
 	histList.SetSelectionMode(gtk.SelectionNone)
@@ -333,16 +341,32 @@ func (d *Dispatcher) openSettings() {
 	scroll.SetVExpand(true)
 	scroll.SetMinContentHeight(200)
 	scroll.SetPropagateNaturalHeight(true)
-	grid.Attach(scroll, 0, 2, 2, 1)
+	grid.Attach(scroll, 0, 3, 2, 1)
 
 	content.Append(grid)
 
 	dialog.ConnectResponse(func(responseID int) {
 		if responseID == int(gtk.ResponseAccept) {
 			newHome := entryHome.Text()
-			if newHome != "" {
+			newDefault := chkDefault.Active()
+			dirty := false
+
+			if newHome != "" && newHome != d.Config.Home {
 				d.Config.Home = newHome
 				d.Home = newHome
+				dirty = true
+			}
+			if newDefault != d.Config.SetDefault {
+				d.Config.SetDefault = newDefault
+				dirty = true
+				if newDefault {
+					if err := config.EnsureDefaultBrowser(); err != nil {
+						log.Printf("failed to set as default browser: %v", err)
+					}
+				}
+			}
+
+			if dirty {
 				if err := d.Config.Save(""); err != nil {
 					log.Printf("failed to save settings: %v", err)
 				}

@@ -54,3 +54,19 @@ home = "https://example.com"
 		t.Errorf("table-form override malformed: %+v", cq)
 	}
 }
+
+func TestSetDefaultConfig(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	user := `set_default = true`
+	if err := os.WriteFile(path, []byte(user), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.SetDefault {
+		t.Errorf("set_default not loaded")
+	}
+}

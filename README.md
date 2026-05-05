@@ -28,6 +28,14 @@ Optional — seed a config you can edit:
 $EDITOR ~/.config/wlbrowser/config.toml
 ```
 
+Set as default browser:
+
+```sh
+./wlbrowser --set-default
+```
+
+Or add `set_default = true` to your `config.toml`.
+
 ## Modes
 
 | Mode    | How you get there                                | What keys do                       |

@@ -27,6 +27,7 @@ type Config struct {
 	Width         int                     `toml:"width"`
 	Height        int                     `toml:"height"`
 	SeqTimeoutMs  int                     `toml:"seq_timeout_ms"`
+	SetDefault    bool                    `toml:"set_default"`
 	Keys          map[string]BindingTable `toml:"keys"`
 }
 
@@ -146,6 +147,9 @@ func merge(dst, src *Config) {
 	}
 	if src.SeqTimeoutMs != 0 {
 		dst.SeqTimeoutMs = src.SeqTimeoutMs
+	}
+	if src.SetDefault {
+		dst.SetDefault = true
 	}
 	for mode, bindings := range src.Keys {
 		dstMode, ok := dst.Keys[mode]

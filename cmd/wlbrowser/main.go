@@ -31,6 +31,7 @@ import (
 func main() {
 	fmt.Fprintln(os.Stderr, "DEBUG: main starting")
 	writeCfg := flag.Bool("write-config", false, "write default config to the standard location and exit")
+	setDefault := flag.Bool("set-default", false, "set as default browser and exit")
 	cfgPath := flag.String("config", "", "path to config.toml (default: $XDG_CONFIG_HOME/wlbrowser/config.toml)")
 	flag.Parse()
 
@@ -46,9 +47,23 @@ func main() {
 		return
 	}
 
+	if *setDefault {
+		if err := config.EnsureDefaultBrowser(); err != nil {
+			log.Fatal(err)
+		}
+		fmt.Println("successfully set wlbrowser as default browser")
+		return
+	}
+
 	cfg, err := config.Load(*cfgPath)
 	if err != nil {
 		log.Fatal(err)
+	}
+
+	if cfg.SetDefault {
+		if err := config.EnsureDefaultBrowser(); err != nil {
+			log.Printf("failed to set as default browser: %v", err)
+		}
 	}
 
 	histStore, err := history.New()
