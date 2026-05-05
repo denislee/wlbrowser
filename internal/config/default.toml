@@ -1,0 +1,47 @@
+# wlbrowser default configuration. Copy to ~/.config/wlbrowser/config.toml
+# (or run `wlbrowser --write-config`) to customize.
+
+home   = "https://duckduckgo.com"
+title  = "wlbrowser"
+width  = 1280
+height = 800
+seq_timeout_ms = 600
+
+# Normal-mode bindings. The value is either an action name (string) or a
+# table {action = "exec"|"js"|"open-url", ...}.
+[keys.normal]
+"j"  = "scroll-down"
+"k"  = "scroll-up"
+"h"  = "scroll-left"
+"l"  = "scroll-right"
+"d"  = "scroll-half-page-down"
+"u"  = "scroll-half-page-up"
+"gg" = "scroll-top"
+"G"  = "scroll-bottom"
+"H"  = "back"
+"L"  = "forward"
+"<C-o>" = "hint-links"
+"<C-f>" = "scroll-page-down"
+"<C-b>" = "scroll-page-up"
+"r"  = "reload"
+"R"  = "reload-hard"
+"gh" = "home"
+"+"  = "zoom-in"
+"="  = "zoom-in"
+"-"  = "zoom-out"
+"0"  = "zoom-reset"
+"o"  = "cmd-open"
+"O"  = "cmd-open-current"
+"<C-k>" = "cmd-open"
+"<C-l>" = "cmd-open-current"
+"/"  = "find-start"
+"n"  = "find-next"
+"N"  = "find-prev"
+":"  = "cmd-mode"
+","  = "open-settings"
+"<C-q>" = "quit"
+"<Esc>" = "escape"
+"<C-[>" = "unfocus"
+"<C-w>" = "delete-last-word"
+yy = "copy-url"
+
