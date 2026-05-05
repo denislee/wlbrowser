@@ -109,7 +109,7 @@ func (m *Machine) Feed(tok keys.Token) bool {
 			consumed = true
 		} else if tok.Mods&(gdk.ControlMask|gdk.AltMask|gdk.SuperMask) != 0 {
 			// Allow single-token modifier bindings (Ctrl/Alt/Super) through the
-			// trie so global shortcuts like <C-k> work while a form field has
+			// trie so global shortcuts like <C-l> work while a form field has
 			// focus. Plain keys still pass to the page so typing is undisturbed.
 			w := m.trie.Walk()
 			if status, val := w.Feed(tok); status == keys.StatusComplete {

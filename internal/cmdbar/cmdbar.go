@@ -238,14 +238,14 @@ func AttachReadline(e *gtk.Entry) {
 	e.AddController(ctrl)
 }
 
-// AttachEscape wires Escape and Ctrl+K on the Entry to Cancel(), and also
+// AttachEscape wires Escape and Ctrl+L on the Entry to Cancel(), and also
 // adds readline shortcuts via AttachReadline.
 func (b *Bar) AttachEscape() {
 	AttachReadline(b.Entry)
 
 	ctrl := gtk.NewEventControllerKey()
 	ctrl.ConnectKeyPressed(func(keyval, _ uint, state gdk.ModifierType) bool {
-		if keyval == gdk.KEY_Escape || (keyval == gdk.KEY_k && (state&gdk.ControlMask) != 0) {
+		if keyval == gdk.KEY_Escape || (keyval == gdk.KEY_l && (state&gdk.ControlMask) != 0) {
 			b.Cancel()
 			return true
 		}
